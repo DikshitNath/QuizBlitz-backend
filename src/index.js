@@ -17,7 +17,7 @@ app.use(cors());
 app.use(express.json());
 app.use('/api/quiz', quizRoutes);
 app.use('/api/game', gameRoutes);
-app.use('/history', historyRouter);
+app.use('/api/history', historyRoutes);
 app.get('/health', (_, res) => res.json({ ok: true }));
 initSocket(io);
 
