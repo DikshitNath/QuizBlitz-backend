@@ -4,7 +4,8 @@ const PlayerSchema = new mongoose.Schema({
   name       : { type: String, required: true },
   avatarEmoji: { type: String, default: '🎮' },
   score      : { type: Number, default: 0 },
-  socketId   : { type: String }
+  socketId   : { type: String },
+  userId     : { type: String, default: null }  // ✅ Firebase UID
 });
 
 const GameSchema = new mongoose.Schema({
@@ -13,7 +14,8 @@ const GameSchema = new mongoose.Schema({
   status         : { type: String, enum: ['waiting','started','reveal','finished'], default: 'waiting' },
   currentQuestion: { type: Number, default: 0 },
   players        : [PlayerSchema],
-  hostSocketId   : { type: String }
+  hostSocketId   : { type: String },
+  hostUserId     : { type: String, default: null }  // ✅ Firebase UID of host
 }, { timestamps: true });
 
 export default mongoose.model('Game', GameSchema);

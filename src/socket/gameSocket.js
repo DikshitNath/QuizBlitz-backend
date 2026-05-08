@@ -6,32 +6,43 @@ export default (io) => {
   io.on('connection', (socket) => {
     console.log('🔌 connected:', socket.id);
 
-    socket.on('host-join', async ({ pin }) => {
+    // ✅ Accept userId from host
+    socket.on('host-join', async ({ pin, userId }) => {
       const game = await Game.findOne({ pin }).populate('quiz');
-      if (!game) return socket.emit('error', { message:'Game not found' });
+      if (!game) return socket.emit('error', { message: 'Game not found' });
       socket.join(pin);
       game.hostSocketId = socket.id;
+      if (userId) game.hostUserId = userId;   // ✅ save Firebase UID
       await game.save();
       socket.emit('host-joined', {
         pin,
         totalQuestions : game.quiz.questions.length,
         timerSeconds   : game.quiz.timerSeconds,
         title          : game.quiz.title,
-        players        : game.players.map(p=>({ name:p.name, score:p.score, avatarEmoji:p.avatarEmoji }))
+        players        : game.players.map(p => ({ name: p.name, score: p.score, avatarEmoji: p.avatarEmoji }))
       });
     });
 
-    socket.on('player-join', async ({ pin, name }) => {
+    // ✅ Accept userId from player
+    socket.on('player-join', async ({ pin, name, userId }) => {
       const game = await Game.findOne({ pin }).populate('quiz');
-      if (!game)                   return socket.emit('error', { message:'Game not found' });
-      if (game.status !== 'waiting') return socket.emit('error', { message:'Game already started' });
+      if (!game)                     return socket.emit('error', { message: 'Game not found' });
+      if (game.status !== 'waiting') return socket.emit('error', { message: 'Game already started' });
 
       const avatars = ['🎮','🦊','🐼','🦁','🐸','🦄','🤖','👾','🎯','🔥'];
-      const avatar  = avatars[Math.floor(Math.random()*avatars.length)];
-      const existing = game.players.find(p=>p.name===name);
+      const avatar  = avatars[Math.floor(Math.random() * avatars.length)];
+      const existing = game.players.find(p => p.name === name);
 
-      if (!existing) game.players.push({ name, avatarEmoji:avatar, score:0, socketId:socket.id });
-      else existing.socketId = socket.id;
+      if (!existing) {
+        game.players.push({
+          name, avatarEmoji: avatar, score: 0,
+          socketId: socket.id,
+          userId  : userId ?? null   // ✅ save Firebase UID (null if guest)
+        });
+      } else {
+        existing.socketId = socket.id;
+        if (userId) existing.userId = userId;  // ✅ update if rejoining
+      }
       await game.save();
 
       socket.join(pin);
@@ -43,20 +54,22 @@ export default (io) => {
         title         : game.quiz.title
       });
       io.to(pin).emit('players-updated', {
-        players: game.players.map(p=>({ name:p.name, score:p.score, avatarEmoji:p.avatarEmoji }))
+        players: game.players.map(p => ({ name: p.name, score: p.score, avatarEmoji: p.avatarEmoji }))
       });
     });
 
+    // ── Unchanged below ────────────────────────────────────────────────────
+
     socket.on('start-game', async ({ pin }) => {
       const game = await Game.findOne({ pin }).populate('quiz');
-      if (!game) return socket.emit('error', { message:'Game not found' });
+      if (!game) return socket.emit('error', { message: 'Game not found' });
       game.status = 'started'; game.currentQuestion = 0;
       await game.save();
       answers[pin] = {};
       const q = game.quiz.questions[0];
       io.to(pin).emit('question', {
-        index:0, totalQuestions:game.quiz.questions.length,
-        timerSeconds:game.quiz.timerSeconds, text:q.text, options:q.options
+        index: 0, totalQuestions: game.quiz.questions.length,
+        timerSeconds: game.quiz.timerSeconds, text: q.text, options: q.options
       });
     });
 
@@ -68,10 +81,10 @@ export default (io) => {
       if (!answers[pin][qIndex]) answers[pin][qIndex] = {};
       if (answers[pin][qIndex][name] !== undefined) return;
       answers[pin][qIndex][name] = { answerIndex, timeTakenMs };
-      socket.emit('answer-received', { questionIndex:qIndex });
+      socket.emit('answer-received', { questionIndex: qIndex });
       const count = Object.keys(answers[pin][qIndex]).length;
       io.to(game.hostSocketId).emit('answer-count', {
-        count, total:game.players.length,
+        count, total: game.players.length,
         answerCounts: _countAnswers(answers[pin][qIndex])
       });
     });
@@ -85,20 +98,20 @@ export default (io) => {
 
       for (const [name, { answerIndex, timeTakenMs }] of Object.entries(qAnswers)) {
         if (answerIndex === correctIndex) {
-          const player = game.players.find(p=>p.name===name);
-          if (player) player.score += 100 + Math.max(0, 1000 - Math.floor(timeTakenMs/10));
+          const player = game.players.find(p => p.name === name);
+          if (player) player.score += 100 + Math.max(0, 1000 - Math.floor(timeTakenMs / 10));
         }
       }
       game.status = 'reveal';
       await game.save();
 
       const leaderboard = game.players
-        .map(p=>({ name:p.name, score:p.score, avatarEmoji:p.avatarEmoji }))
-        .sort((a,b)=>b.score-a.score);
+        .map(p => ({ name: p.name, score: p.score, avatarEmoji: p.avatarEmoji }))
+        .sort((a, b) => b.score - a.score);
 
       io.to(pin).emit('answer-revealed', {
-        correctIndex, questionIndex:qIndex,
-        answerCounts:_countAnswers(qAnswers), leaderboard
+        correctIndex, questionIndex: qIndex,
+        answerCounts: _countAnswers(qAnswers), leaderboard
       });
     });
 
@@ -112,16 +125,16 @@ export default (io) => {
         game.status = 'finished';
         await game.save();
         const leaderboard = game.players
-          .map(p=>({ name:p.name, score:p.score, avatarEmoji:p.avatarEmoji }))
-          .sort((a,b)=>b.score-a.score);
+          .map(p => ({ name: p.name, score: p.score, avatarEmoji: p.avatarEmoji }))
+          .sort((a, b) => b.score - a.score);
         io.to(pin).emit('game-finished', { leaderboard });
       } else {
         game.currentQuestion = nextIndex; game.status = 'started';
         await game.save();
         const q = game.quiz.questions[nextIndex];
         io.to(pin).emit('question', {
-          index:nextIndex, totalQuestions:totalQ,
-          timerSeconds:game.quiz.timerSeconds, text:q.text, options:q.options
+          index: nextIndex, totalQuestions: totalQ,
+          timerSeconds: game.quiz.timerSeconds, text: q.text, options: q.options
         });
       }
     });
@@ -131,8 +144,8 @@ export default (io) => {
       if (!game) return;
       game.status = 'finished'; await game.save();
       const leaderboard = game.players
-        .map(p=>({ name:p.name, score:p.score, avatarEmoji:p.avatarEmoji }))
-        .sort((a,b)=>b.score-a.score);
+        .map(p => ({ name: p.name, score: p.score, avatarEmoji: p.avatarEmoji }))
+        .sort((a, b) => b.score - a.score);
       io.to(pin).emit('game-finished', { leaderboard });
     });
 
@@ -141,7 +154,7 @@ export default (io) => {
 };
 
 function _countAnswers(qAnswers) {
-  const counts = [0,0,0,0];
+  const counts = [0, 0, 0, 0];
   for (const { answerIndex } of Object.values(qAnswers))
     if (answerIndex >= 0 && answerIndex <= 3) counts[answerIndex]++;
   return counts;

@@ -6,6 +6,7 @@ import mongoose   from 'mongoose';
 import { Server } from 'socket.io';
 import quizRoutes from './routes/quiz.js';
 import gameRoutes from './routes/game.js';
+import historyRoutes from './routes/history.js';
 import initSocket from './socket/gameSocket.js';
 
 const app    = express();
@@ -16,6 +17,7 @@ app.use(cors());
 app.use(express.json());
 app.use('/api/quiz', quizRoutes);
 app.use('/api/game', gameRoutes);
+app.use('/history', historyRouter);
 app.get('/health', (_, res) => res.json({ ok: true }));
 initSocket(io);
 
