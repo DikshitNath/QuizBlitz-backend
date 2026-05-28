@@ -18,7 +18,7 @@ app.use(express.json());
 app.use('/api/quiz', quizRoutes);
 app.use('/api/game', gameRoutes);
 app.use('/api/history', historyRoutes);
-app.get('/health', (_, res) => res.json({ ok: true }));
+app.get('/health', (_, res) => res.json({ ok: true, message: "CI/CD is live and working!" }));
 initSocket(io);
 
 mongoose.connect(process.env.MONGODB_URI)
