@@ -42,7 +42,7 @@ jobs:
             docker rm quizblitz || true
             docker image prune -f
             
-            docker run -d --name quizblitz \
+            docker run -d --restart unless-stopped --name quizblitz \
               -p 3000:3000 \
               -e PORT=3000 \
               -e MONGODB_URI="${{ secrets.MONGODB_URI }}" \
