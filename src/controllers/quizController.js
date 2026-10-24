@@ -54,7 +54,7 @@ export const generateFromTopic = async (req, res) => {
   try {
     const r = await axios.post(
       'https://api.groq.com/openai/v1/chat/completions',
-      { model: 'llama-3.3-70b-versatile', messages: [{ role: 'user', content: prompt }], temperature: 0.7 },
+      { model: 'openai/gpt-oss-120b', messages: [{ role: 'user', content: prompt }], temperature: 0.7 },
       { headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` } }
     );
     const content = r.data.choices[0].message.content.trim();
